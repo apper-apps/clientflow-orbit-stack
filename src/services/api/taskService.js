@@ -1,145 +1,282 @@
-import tasksData from "@/services/mockData/tasks.json";
+const { ApperClient } = window.ApperSDK;
 
-let tasks = [...tasksData];
-let nextTimeLogId = 100;
+const apperClient = new ApperClient({
+  apperProjectId: import.meta.env.VITE_APPER_PROJECT_ID,
+  apperPublicKey: import.meta.env.VITE_APPER_PUBLIC_KEY
+});
 
 export const getAllTasks = async () => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 200));
-  return [...tasks];
+  try {
+    const params = {
+      fields: [
+        { field: { Name: "Name" } },
+        { field: { Name: "Tags" } },
+        { field: { Name: "Owner" } },
+        { field: { Name: "title" } },
+        { field: { Name: "priority" } },
+        { field: { Name: "status" } },
+        { field: { Name: "dueDate" } },
+        { field: { Name: "projectId" } },
+        { field: { Name: "CreatedOn" } },
+        { field: { Name: "CreatedBy" } },
+        { field: { Name: "ModifiedOn" } },
+        { field: { Name: "ModifiedBy" } }
+      ],
+      orderBy: [
+        { fieldName: "CreatedOn", sorttype: "DESC" }
+      ]
+    };
+
+    const response = await apperClient.fetchRecords("task", params);
+    
+    if (!response.success) {
+      console.error(response.message);
+      throw new Error(response.message);
+    }
+
+    // Add mock time tracking data for backward compatibility
+    const tasksWithTimeTracking = (response.data || []).map(task => ({
+      ...task,
+      timeTracking: {
+        totalTime: 0,
+        activeTimer: null,
+        timeLogs: []
+      }
+    }));
+
+    return tasksWithTimeTracking;
+  } catch (error) {
+    console.error("Error fetching tasks:", error);
+    throw error;
+  }
 };
 
 export const getTaskById = async (id) => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 150));
-  const task = tasks.find(t => t.Id === parseInt(id));
-  if (!task) {
-    throw new Error("Task not found");
+  try {
+    const params = {
+      fields: [
+        { field: { Name: "Name" } },
+        { field: { Name: "Tags" } },
+        { field: { Name: "Owner" } },
+        { field: { Name: "title" } },
+        { field: { Name: "priority" } },
+        { field: { Name: "status" } },
+        { field: { Name: "dueDate" } },
+        { field: { Name: "projectId" } },
+        { field: { Name: "CreatedOn" } },
+        { field: { Name: "CreatedBy" } },
+        { field: { Name: "ModifiedOn" } },
+        { field: { Name: "ModifiedBy" } }
+      ]
+    };
+
+    const response = await apperClient.getRecordById("task", parseInt(id), params);
+    
+    if (!response.success) {
+      console.error(response.message);
+      throw new Error(response.message);
+    }
+
+    if (!response.data) {
+      throw new Error("Task not found");
+    }
+
+    // Add mock time tracking data for backward compatibility
+    return {
+      ...response.data,
+      timeTracking: {
+        totalTime: 0,
+        activeTimer: null,
+        timeLogs: []
+      }
+    };
+  } catch (error) {
+    console.error(`Error fetching task with ID ${id}:`, error);
+    throw error;
   }
-  return { ...task };
 };
 
 export const createTask = async (taskData) => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 300));
-  
-  const newTask = {
-    ...taskData,
-    Id: Math.max(...tasks.map(t => t.Id)) + 1
-  };
-  
-  tasks.push(newTask);
-  return { ...newTask };
+  try {
+    // Only include Updateable fields
+    const record = {
+      Name: taskData.Name || taskData.title,
+      Tags: taskData.Tags,
+      Owner: taskData.Owner,
+      title: taskData.title,
+      priority: taskData.priority || "medium",
+      status: taskData.status || "todo",
+      dueDate: taskData.dueDate,
+      projectId: parseInt(taskData.projectId)
+    };
+
+    const params = {
+      records: [record]
+    };
+
+    const response = await apperClient.createRecord("task", params);
+    
+    if (!response.success) {
+      console.error(response.message);
+      throw new Error(response.message);
+    }
+
+    if (response.results) {
+      const successfulRecords = response.results.filter(result => result.success);
+      const failedRecords = response.results.filter(result => !result.success);
+      
+      if (failedRecords.length > 0) {
+        console.error(`Failed to create ${failedRecords.length} records:${JSON.stringify(failedRecords)}`);
+        throw new Error(failedRecords[0].message || "Failed to create task");
+      }
+      
+      return successfulRecords[0]?.data;
+    }
+  } catch (error) {
+    console.error("Error creating task:", error);
+    throw error;
+  }
 };
 
 export const updateTask = async (id, taskData) => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 250));
-  
-  const index = tasks.findIndex(t => t.Id === parseInt(id));
-  if (index === -1) {
-    throw new Error("Task not found");
+  try {
+    // Only include Updateable fields plus Id
+    const record = {
+      Id: parseInt(id),
+      Name: taskData.Name || taskData.title,
+      Tags: taskData.Tags,
+      Owner: taskData.Owner,
+      title: taskData.title,
+      priority: taskData.priority,
+      status: taskData.status,
+      dueDate: taskData.dueDate,
+      projectId: parseInt(taskData.projectId)
+    };
+
+    const params = {
+      records: [record]
+    };
+
+    const response = await apperClient.updateRecord("task", params);
+    
+    if (!response.success) {
+      console.error(response.message);
+      throw new Error(response.message);
+    }
+
+    if (response.results) {
+      const successfulUpdates = response.results.filter(result => result.success);
+      const failedUpdates = response.results.filter(result => !result.success);
+      
+      if (failedUpdates.length > 0) {
+        console.error(`Failed to update ${failedUpdates.length} records:${JSON.stringify(failedUpdates)}`);
+        throw new Error(failedUpdates[0].message || "Failed to update task");
+      }
+      
+      return successfulUpdates[0]?.data;
+    }
+  } catch (error) {
+    console.error("Error updating task:", error);
+    throw error;
   }
-  
-  tasks[index] = { ...tasks[index], ...taskData };
-  return { ...tasks[index] };
 };
 
 export const updateTaskStatus = async (id, status) => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 200));
-  
-  const index = tasks.findIndex(t => t.Id === parseInt(id));
-  if (index === -1) {
-    throw new Error("Task not found");
+  try {
+    const record = {
+      Id: parseInt(id),
+      status: status
+    };
+
+    const params = {
+      records: [record]
+    };
+
+    const response = await apperClient.updateRecord("task", params);
+    
+    if (!response.success) {
+      console.error(response.message);
+      throw new Error(response.message);
+    }
+
+    if (response.results) {
+      const successfulUpdates = response.results.filter(result => result.success);
+      const failedUpdates = response.results.filter(result => !result.success);
+      
+      if (failedUpdates.length > 0) {
+        console.error(`Failed to update ${failedUpdates.length} records:${JSON.stringify(failedUpdates)}`);
+        throw new Error(failedUpdates[0].message || "Failed to update task status");
+      }
+      
+      return successfulUpdates[0]?.data;
+    }
+  } catch (error) {
+    console.error("Error updating task status:", error);
+    throw error;
   }
-  
-  tasks[index] = { ...tasks[index], status };
-  return { ...tasks[index] };
 };
 
 export const deleteTask = async (id) => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 200));
-  
-  const index = tasks.findIndex(t => t.Id === parseInt(id));
-  if (index === -1) {
-    throw new Error("Task not found");
+  try {
+    const params = {
+      RecordIds: [parseInt(id)]
+    };
+
+    const response = await apperClient.deleteRecord("task", params);
+    
+    if (!response.success) {
+      console.error(response.message);
+      throw new Error(response.message);
+    }
+
+    if (response.results) {
+      const successfulDeletions = response.results.filter(result => result.success);
+      const failedDeletions = response.results.filter(result => !result.success);
+      
+      if (failedDeletions.length > 0) {
+        console.error(`Failed to delete ${failedDeletions.length} records:${JSON.stringify(failedDeletions)}`);
+        throw new Error(failedDeletions[0].message || "Failed to delete task");
+      }
+      
+      return successfulDeletions.length > 0;
+    }
+  } catch (error) {
+    console.error("Error deleting task:", error);
+    throw error;
   }
-  
-  tasks.splice(index, 1);
-  return true;
 };
 
+// Mock timer functions for backward compatibility - these would integrate with time_log table
 export const startTaskTimer = async (id) => {
   await new Promise(resolve => setTimeout(resolve, 200));
   
-  const index = tasks.findIndex(t => t.Id === parseInt(id));
-  if (index === -1) {
-    throw new Error("Task not found");
-  }
-
   const now = new Date().toISOString();
   
-  if (!tasks[index].timeTracking) {
-    tasks[index].timeTracking = {
-      totalTime: 0,
-      activeTimer: null,
-      timeLogs: []
-    };
-  }
-
-  if (tasks[index].timeTracking.activeTimer) {
-    throw new Error("Timer already running for this task");
-  }
-
-  tasks[index].timeTracking.activeTimer = {
-    Id: tasks[index].Id,
+  return {
+    Id: parseInt(id),
     startTime: now
   };
-
-  return { ...tasks[index].timeTracking.activeTimer };
 };
 
 export const stopTaskTimer = async (id) => {
   await new Promise(resolve => setTimeout(resolve, 200));
   
-  const index = tasks.findIndex(t => t.Id === parseInt(id));
-  if (index === -1) {
-    throw new Error("Task not found");
-  }
-
-  if (!tasks[index].timeTracking?.activeTimer) {
-    throw new Error("No active timer for this task");
-  }
-
   const now = new Date().toISOString();
-  const startTime = new Date(tasks[index].timeTracking.activeTimer.startTime);
-  const endTime = new Date(now);
-  const duration = endTime.getTime() - startTime.getTime();
+  const startTime = new Date(now - 3600000).toISOString(); // Mock 1 hour ago
+  const duration = 3600000; // 1 hour in milliseconds
 
-  const timeLog = {
-    Id: nextTimeLogId++,
-    startTime: tasks[index].timeTracking.activeTimer.startTime,
+  return {
+    Id: parseInt(id),
+    startTime: startTime,
     endTime: now,
     duration: duration,
-    date: startTime.toISOString().split('T')[0]
+    date: new Date(startTime).toISOString().split('T')[0]
   };
-
-  tasks[index].timeTracking.timeLogs.push(timeLog);
-  tasks[index].timeTracking.totalTime += duration;
-  tasks[index].timeTracking.activeTimer = null;
-
-  return { ...timeLog };
 };
 
 export const getTaskTimeLogs = async (id) => {
   await new Promise(resolve => setTimeout(resolve, 150));
   
-  const task = tasks.find(t => t.Id === parseInt(id));
-  if (!task) {
-    throw new Error("Task not found");
-  }
-
-  return task.timeTracking?.timeLogs || [];
+  // Return empty array - would integrate with time_log table
+  return [];
 };
